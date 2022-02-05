@@ -1,0 +1,107 @@
+# Maintainer:  Bartłomiej Piotrowski <bpiotrowski@archlinux.org>
+# Contributor: Allan McRae <allan@archlinux.org>
+
+# toolchain build order: linux-api-headers->glibc->binutils->gcc->binutils->glibc
+
+pkgname=binutils
+pkgver=2.37
+pkgrel=1
+pkgdesc='A set of programs to assemble and manipulate binary and object files'
+arch=(x86_64)
+url='https://www.gnu.org/software/binutils/'
+license=(GPL)
+groups=(base-devel)
+depends=(glibc zlib libelf)
+#makedepends=(git)
+checkdepends=(dejagnu debuginfod bc)
+optdepends=('debuginfod: for debuginfod server/client functionality')
+conflicts=(binutils-multilib)
+replaces=(binutils-multilib)
+options=(staticlibs !distcc !ccache)
+#_commit=cb5f6a3e146cc70bc2d864989386df80acec5d3e
+#source=(git+https://sourceware.org/git/binutils-gdb.git#commit=$_commit)
+source=(https://ftp.gnu.org/gnu/binutils/binutils-$pkgver.tar.xz{,.sig}
+        "$pkgname-2.37-man-pages-fix.patch::https://sourceware.org/git?p=binutils-gdb.git;a=patch;h=2dad02b6d46eef438cbd14d8511487b056628a38")
+sha256sums=('820d9724f020a3e69cb337893a0b63c2db161dadcb0e06fc11dc29eb1e84a32c'
+            'SKIP'
+            'bd4add3a359eb11c59b5389f819821d3131772f67cc8f17b7b51a25ba3e170c1')
+validpgpkeys=(3A24BC1E8FB409FA9F14371813FCEF89DD9E3C4F)
+
+prepare() {
+  [[ ! -d binutils-gdb ]] && ln -s binutils-$pkgver binutils-gdb
+  mkdir -p binutils-build
+
+  cd binutils-gdb
+
+  # Turn off development mode (-Werror, gas run-time checks, date in sonames)
+  sed -i '/^development=/s/true/false/' bfd/development.sh
+
+  # hack! - libiberty configure tests for header files using "$CPP $CPPFLAGS"
+  sed -i "/ac_cpp=/s/\$CPPFLAGS/\$CPPFLAGS -O2/" libiberty/configure
+
+  # fix 0 length man pages in 2.37 tarball
+  patch -p1 -i ../$pkgname-2.37-man-pages-fix.patch
+  find . \( -name "*.1" -o -name "*.man" \) -delete
+}
+
+build() {
+  cd binutils-build
+
+  "$srcdir/binutils-gdb/configure" \
+    --prefix=/usr \
+    --with-lib-path=/usr/lib:/usr/local/lib \
+    --with-bugurl=https://bugs.archlinux.org/ \
+    --enable-cet \
+    --enable-deterministic-archives \
+    --enable-gold \
+    --enable-install-libiberty \
+    --enable-ld=default \
+    --enable-lto \
+    --enable-plugins \
+    --enable-relro \
+    --enable-shared \
+    --enable-targets=x86_64-pep \
+    --enable-threads \
+    --disable-gdb \
+    --disable-gdbserver \
+    --disable-libdecnumber \
+    --disable-readline \
+    --disable-sim \
+    --disable-werror \
+    --with-debuginfod \
+    --with-pic \
+    --with-system-zlib
+
+  make -O tooldir=/usr
+}
+
+check() {
+  cd binutils-build
+
+  # current testsuite failure in debuginfod (objdump)
+  # https://sourceware.org/bugzilla/show_bug.cgi?id=28029
+  sed -i '/test_fetch_debuglink $OBJDUMP/d' \
+      $srcdir/binutils-gdb/binutils/testsuite/binutils-all/debuginfod.exp
+
+  # Use minimal flags for testsuite
+  # ld testsuite uses CFLAGS_FOR_TARGET and requires -g
+  # gold testsuite requires CXXFLAGS/CFLAGS with default PIE/PIC disabled
+  make -O CFLAGS_FOR_TARGET="-O2 -g" \
+          CXXFLAGS="-O2 -no-pie -fno-PIC" \
+          CFLAGS="-O2 -no-pie" \
+          LDFLAGS="" \
+          check || true
+}
+
+package() {
+  cd binutils-build
+  make -j1 prefix="$pkgdir/usr" tooldir="$pkgdir/usr" install
+
+  # Remove unwanted files
+  rm -f "$pkgdir"/usr/share/man/man1/{dlltool,windres,windmc}*
+
+  # No shared linking to these files outside binutils
+  rm -f "$pkgdir"/usr/lib/lib{bfd,opcodes}.so
+  echo 'INPUT( /usr/lib/libbfd.a -liberty -lz -ldl )' > "$pkgdir/usr/lib/libbfd.so"
+  echo 'INPUT( /usr/lib/libopcodes.a -lbfd )' > "$pkgdir/usr/lib/libopcodes.so"
+}
