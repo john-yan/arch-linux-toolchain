@@ -47,6 +47,11 @@ prepare() {
 build() {
   cd binutils-build
 
+  # remove lto
+  CFLAGS=${CFLAGS/-flto/}
+  CXXFLAGS=${CXXFLAGS/-flto/}
+  LDFLAGS=${LDFLAGS/-flto/}
+
   "$srcdir/binutils-gdb/configure" \
     --prefix=/usr \
     --with-lib-path=/usr/lib:/usr/local/lib \
