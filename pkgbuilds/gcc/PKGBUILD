@@ -16,7 +16,7 @@ license=(GPL LGPL FDL custom)
 url='https://gcc.gnu.org'
 makedepends=(binutils libmpc gcc-ada doxygen lib32-glibc lib32-gcc-libs python git libxcrypt zstd)
 checkdepends=(dejagnu inetutils tcl expect python-pytest)
-options=(!emptydirs)
+options=('!emptydirs' 'staticlibs' '!lto')
 _libdir=usr/lib/gcc/$CHOST/${pkgver%%+*}
 # _commit=6beb39ee6c465c21d0cc547fd66b445100cdcc35
 # source=(git://gcc.gnu.org/git/gcc.git#commit=$_commit
