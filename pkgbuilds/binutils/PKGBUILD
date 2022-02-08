@@ -17,7 +17,7 @@ checkdepends=(dejagnu debuginfod bc)
 optdepends=('debuginfod: for debuginfod server/client functionality')
 conflicts=(binutils-multilib)
 replaces=(binutils-multilib)
-options=(staticlibs !distcc !ccache)
+options=(staticlibs !distcc !ccache !lto)
 #_commit=cb5f6a3e146cc70bc2d864989386df80acec5d3e
 #source=(git+https://sourceware.org/git/binutils-gdb.git#commit=$_commit)
 source=(https://ftp.gnu.org/gnu/binutils/binutils-$pkgver.tar.xz{,.sig}
@@ -46,11 +46,6 @@ prepare() {
 
 build() {
   cd binutils-build
-
-  # remove lto
-  CFLAGS=${CFLAGS/-flto/}
-  CXXFLAGS=${CXXFLAGS/-flto/}
-  LDFLAGS=${LDFLAGS/-flto/}
 
   "$srcdir/binutils-gdb/configure" \
     --prefix=/usr \
@@ -95,7 +90,7 @@ check() {
           CXXFLAGS="-O2 -no-pie -fno-PIC" \
           CFLAGS="-O2 -no-pie" \
           LDFLAGS="" \
-          check || true
+          check
 }
 
 package() {
