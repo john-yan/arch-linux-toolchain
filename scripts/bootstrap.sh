@@ -74,7 +74,7 @@ done
 REPO=${1:-$DEFAULT_REPO}
 ARCH=$(uname -m)
 BUILD_CMD=("$REPO-$ARCH-build")
-MAKECHROOTPKG_CMD=(sudo makechrootpkg -r "/var/lib/archbuild/$REPO-$ARCH/" -- -ir)
+MAKECHROOTPKG_CMD=(sudo --preserve-env=MAKEFLAGS makechrootpkg -r "/var/lib/archbuild/$REPO-$ARCH/" -- -C)
 
 mkdir -p "$BUILD_DIR"
 rsync -rtvv "$PKGBUILD_DIR/" "$BUILD_DIR"
@@ -128,20 +128,42 @@ function resolve_libiberty_conflicts() {
 log "Re-initializing $REPO-$ARCH"
 "${BUILD_CMD[@]}" -c || [[ $? -eq 255 ]]
 
-build linux-api-headers
+build linux-api-headers -ir
 
-build glibc --nocheck
-resolve_libiberty_conflicts
-build binutils --nocheck
-build gcc --nocheck
+build glibc -ir --nocheck
+
+# skip install binutils and gcc into the chroot env due to conflicts in libiberty
+build binutils -r --nocheck
+build gcc -r --nocheck
+
+STAGE1_DIR=/var/lib/archbuild/$REPO-$ARCH/$USER/stage1
+sudo mkdir -p $STAGE1_DIR
+sudo cp $BUILD_DIR/linux-api-headers/*.zst $STAGE1_DIR/
+sudo cp $BUILD_DIR/glibc/*.zst $STAGE1_DIR/
+sudo cp $BUILD_DIR/binutils/*.zst $STAGE1_DIR/
+sudo cp $BUILD_DIR/gcc/*.zst $STAGE1_DIR/
+
+# remove gcc/binutils and reinstall them in chroot env
+arch-nspawn /var/lib/archbuild/staging-x86_64/john pacman -Rs --noconfirm gcc binutils
+arch-nspawn /var/lib/archbuild/staging-x86_64/john pacman -U --noconfirm  \
+  /stage1/binutils-2.37-1-x86_64.pkg.tar.zst                              \
+  /stage1/gcc-11.2.1-1-x86_64.pkg.tar.zst                                 \
+  /stage1/gcc-ada-11.2.1-1-x86_64.pkg.tar.zst                             \
+  /stage1/gcc-d-11.2.1-1-x86_64.pkg.tar.zst                               \
+  /stage1/gcc-fortran-11.2.1-1-x86_64.pkg.tar.zst                         \
+  /stage1/gcc-go-11.2.1-1-x86_64.pkg.tar.zst                              \
+  /stage1/gcc-libs-11.2.1-1-x86_64.pkg.tar.zst                            \
+  /stage1/gcc-objc-11.2.1-1-x86_64.pkg.tar.zst                            \
+  /stage1/lib32-gcc-libs-11.2.1-1-x86_64.pkg.tar.zst
+
 
 # Move the unchecked packages to a separate directory as a checkpoint.
-move_pkgs unchecked glibc binutils gcc
+#move_pkgs unchecked glibc binutils gcc
+#
+build glibc -ir
+build binutils -ir
+build gcc -ir
 
-build glibc
-build binutils
-build gcc
-
-build linux
-build libtools
-build valgrind
+#build linux
+#build libtools
+#build valgrind
